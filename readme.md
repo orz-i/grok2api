@@ -95,6 +95,8 @@ docker compose up -d
 | `SERVER_STORAGE_URL` | 存储连接串（local 时可为空） | `""` | `postgresql+asyncpg://user:password@host:5432/db` |
 
 > MySQL 示例：`mysql+aiomysql://user:password@host:3306/db`（若填 `mysql://` 会自动转为 `mysql+aiomysql://`）
+>
+> PostgreSQL 示例：`postgresql+asyncpg://user:password@host:5432/db`（若填 `postgresql://` / `postgres://` / `pgsql://` 会自动转为 `postgresql+asyncpg://`；Neon 可直接使用 `postgresql://...?...sslmode=require`）
 
 <br>
 

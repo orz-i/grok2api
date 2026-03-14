@@ -95,6 +95,8 @@ docker compose up -d
 | `SERVER_STORAGE_URL` | Storage DSN (optional for local) | `""` | `postgresql+asyncpg://user:password@host:5432/db` |
 
 > MySQL example: `mysql+aiomysql://user:password@host:3306/db` (if you provide `mysql://`, it will be converted to `mysql+aiomysql://`).
+>
+> PostgreSQL example: `postgresql+asyncpg://user:password@host:5432/db` (if you provide `postgresql://` / `postgres://` / `pgsql://`, it will be converted to `postgresql+asyncpg://`; for Neon you can use `postgresql://...?...sslmode=require` directly).
 
 <br>
 

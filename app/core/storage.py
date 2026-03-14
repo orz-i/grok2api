@@ -1277,7 +1277,33 @@ class StorageFactory:
     # cannot accept via the URL and must be passed as connect_args instead.
     _SQL_SSL_PARAM_KEYS = ("sslmode", "ssl-mode", "ssl")
 
-    # Canonical postgres ssl modes (asyncpg accepts libpq-style mode strings).
+    # channel_binding is a libpq option that can appear in Neon connection
+    # strings (notably pooled DSNs). When unsupported by the driver it must
+    # be stripped to avoid being forwarded as an unexpected keyword arg.
+    _PG_CHANNEL_BINDING_PARAM_KEYS: ClassVar[tuple[str, ...]] = (
+        "channel_binding",
+        "channel-binding",
+    )
+
+    _PG_CHANNEL_BINDING_ALIASES: ClassVar[dict[str, str]] = {
+        "disable": "disable",
+        "disabled": "disable",
+        "false": "disable",
+        "0": "disable",
+        "no": "disable",
+        "off": "disable",
+        "prefer": "prefer",
+        "preferred": "prefer",
+        "allow": "prefer",
+        "require": "require",
+        "required": "require",
+        "true": "require",
+        "1": "require",
+        "yes": "require",
+        "on": "require",
+    }
+
+    # Canonical postgres ssl modes (libpq-style sslmode values).
     _PG_SSL_MODE_ALIASES: ClassVar[dict[str, str]] = {
         "disable": "disable",
         "disabled": "disable",
@@ -1348,6 +1374,18 @@ class StorageFactory:
         return canonical
 
     @classmethod
+    def _normalize_pgsql_channel_binding(cls, mode: str) -> str:
+        """Normalize channel_binding value for pgsql (libpq-compatible)."""
+        if not mode:
+            raise ValueError("channel_binding cannot be empty")
+
+        normalized = mode.strip().lower().replace(" ", "")
+        canonical = cls._PG_CHANNEL_BINDING_ALIASES.get(normalized)
+        if not canonical:
+            raise ValueError(f"Unsupported channel_binding '{mode}' for pgsql storage")
+        return canonical
+
+    @classmethod
     def _build_mysql_ssl_context(cls, mode: str):
         """Build SSLContext for aiomysql according to normalized mysql mode.
 
@@ -1373,6 +1411,63 @@ class StorageFactory:
         return ctx
 
     @classmethod
+    def _build_pgsql_ssl_config(cls, mode: str):
+        """Build asyncpg ssl parameter according to normalized postgres sslmode.
+
+        Note: asyncpg cannot gracefully "prefer SSL, fall back to plaintext".
+        When ssl is enabled, servers that do not support SSL will fail.
+        """
+        import ssl as _ssl
+
+        if mode == "disable":
+            return False
+
+        ctx = _ssl.create_default_context()
+        if mode in ("allow", "prefer", "require"):
+            ctx.check_hostname = False
+            ctx.verify_mode = _ssl.CERT_NONE
+        elif mode == "verify-ca":
+            ctx.check_hostname = False
+        # verify-full keeps defaults: verify cert + hostname.
+        return ctx
+
+    @classmethod
+    def _build_pgsql_channel_binding_connect_args(
+        cls, raw_channel_binding: Optional[str]
+    ) -> Optional[dict]:
+        if not raw_channel_binding:
+            return None
+
+        mode = cls._normalize_pgsql_channel_binding(raw_channel_binding)
+
+        try:
+            import inspect
+            import asyncpg  # type: ignore
+        except ImportError:
+            # Driver isn't installed; SQLStorage will fail later anyway.
+            return None
+
+        try:
+            sig = inspect.signature(asyncpg.connect)
+            supports_kw = (
+                "channel_binding" in sig.parameters
+                or any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD
+                    for p in sig.parameters.values()
+                )
+            )
+        except Exception:
+            supports_kw = False
+
+        if not supports_kw:
+            logger.warning(
+                "StorageFactory: asyncpg 不支持 channel_binding 参数，已忽略（可从 SERVER_STORAGE_URL 移除该参数或升级 asyncpg）。"
+            )
+            return None
+
+        return {"channel_binding": mode}
+
+    @classmethod
     def _build_sql_connect_args(
         cls, storage_type: str, raw_ssl_mode: Optional[str]
     ) -> Optional[dict]:
@@ -1382,8 +1477,7 @@ class StorageFactory:
 
         mode = cls._normalize_ssl_mode(storage_type, raw_ssl_mode)
         if storage_type == "pgsql":
-            # asyncpg accepts libpq-style ssl mode strings via ssl=...
-            return {"ssl": mode}
+            return {"ssl": cls._build_pgsql_ssl_config(mode)}
         if storage_type == "mysql":
             ctx = cls._build_mysql_ssl_context(mode)
             if ctx is None:
@@ -1427,20 +1521,41 @@ class StorageFactory:
 
         parsed = urlparse(normalized_url)
         ssl_mode: Optional[str] = None
+        channel_binding: Optional[str] = None
         filtered_query_items = []
         ssl_param_keys = {k.lower() for k in cls._SQL_SSL_PARAM_KEYS}
+        channel_binding_keys = {k.lower() for k in cls._PG_CHANNEL_BINDING_PARAM_KEYS}
         for key, value in parse_qsl(parsed.query, keep_blank_values=True):
             if key.lower() in ssl_param_keys:
                 if ssl_mode is None and value:
                     ssl_mode = value
+                continue
+            if (
+                storage_type == "pgsql"
+                and key.lower() in channel_binding_keys
+                and channel_binding is None
+                and value
+            ):
+                channel_binding = value
                 continue
             filtered_query_items.append((key, value))
 
         cleaned_url = urlunparse(
             parsed._replace(query=urlencode(filtered_query_items, doseq=True))
         )
-        connect_args = cls._build_sql_connect_args(storage_type, ssl_mode)
-        return cleaned_url, connect_args
+        connect_args: dict = {}
+        ssl_connect_args = cls._build_sql_connect_args(storage_type, ssl_mode)
+        if ssl_connect_args:
+            connect_args.update(ssl_connect_args)
+
+        if storage_type == "pgsql":
+            cb_connect_args = cls._build_pgsql_channel_binding_connect_args(
+                channel_binding
+            )
+            if cb_connect_args:
+                connect_args.update(cb_connect_args)
+
+        return cleaned_url, (connect_args or None)
 
     @classmethod
     def get_storage(cls) -> BaseStorage:
