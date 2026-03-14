@@ -93,9 +93,6 @@ docker compose up -d
 | `SERVER_WORKERS` | Server worker count | `1` | `2` |
 | `SERVER_STORAGE_TYPE` | Storage type (`local`/`redis`/`mysql`/`pgsql`) | `local` | `pgsql` |
 | `SERVER_STORAGE_URL` | Storage DSN (optional for local) | `""` | `postgresql+asyncpg://user:password@host:5432/db` |
-| `CORS_ALLOW_ORIGINS` | Allowed CORS origins (comma-separated, supports `*`) | `""` | `http://localhost:3000,https://example.com` |
-| `CORS_ALLOW_ORIGIN_REGEX` | Allowed CORS origin regex (overrides default localhost/LAN allowlist; set empty to disable) | see default in `main.py` | `^https?://localhost(?::\\d+)?$` |
-| `CORS_ALLOW_CREDENTIALS` | Allow credentials in CORS (cookies, etc.) | `true` | `false` |
 
 > MySQL example: `mysql+aiomysql://user:password@host:3306/db` (if you provide `mysql://`, it will be converted to `mysql+aiomysql://`).
 >

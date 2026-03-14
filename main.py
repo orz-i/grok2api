@@ -15,18 +15,6 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 PUBLIC_DIR = BASE_DIR / "_public"
 
-# Default: allow localhost + private LAN IPs for browser-based dev UIs.
-DEFAULT_CORS_ALLOW_ORIGIN_REGEX = (
-    r"^https?://(?:"
-    r"localhost"
-    r"|127(?:\.\d{1,3}){3}"
-    r"|\[::1\]"
-    r"|10(?:\.\d{1,3}){3}"
-    r"|192\.168(?:\.\d{1,3}){2}"
-    r"|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}"
-    r")(?::\d+)?$"
-)
-
 # Ensure the project root is on sys.path (helps when Vercel sets a different CWD)
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
@@ -132,51 +120,12 @@ def create_app() -> FastAPI:
     )
 
     # CORS 配置
-    # Env overrides:
-    # - CORS_ALLOW_ORIGINS: comma-separated list, supports "*"
-    # - CORS_ALLOW_ORIGIN_REGEX: custom regex (set to empty to disable)
-    # - CORS_ALLOW_CREDENTIALS: true/false
-    cors_allow_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
-    cors_allow_origin_regex_env = os.getenv("CORS_ALLOW_ORIGIN_REGEX")
-    cors_allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "true").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-
-    cors_allow_origins: list[str] = []
-    if cors_allow_origins_env:
-        if cors_allow_origins_env == "*":
-            cors_allow_origins = ["*"]
-        else:
-            cors_allow_origins = [
-                origin.strip()
-                for origin in cors_allow_origins_env.split(",")
-                if origin.strip()
-            ]
-
-    # Defaults to LAN allowlist; if CORS_ALLOW_ORIGINS is explicitly set, treat it
-    # as an override and disable the default regex unless user also sets it.
-    if cors_allow_origin_regex_env is not None:
-        cors_allow_origin_regex = cors_allow_origin_regex_env.strip()
-    elif cors_allow_origins_env:
-        cors_allow_origin_regex = ""
-    else:
-        cors_allow_origin_regex = DEFAULT_CORS_ALLOW_ORIGIN_REGEX
-
-    cors_kwargs = dict(
-        allow_origins=cors_allow_origins or [],
-        allow_credentials=cors_allow_credentials,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    if cors_allow_origin_regex:
-        cors_kwargs["allow_origin_regex"] = cors_allow_origin_regex
-
     app.add_middleware(
         CORSMiddleware,
-        **cors_kwargs,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # 请求日志和 ID 中间件
