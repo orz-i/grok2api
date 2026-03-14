@@ -93,6 +93,9 @@ docker compose up -d
 | `SERVER_WORKERS` | 服务进程数量 | `1` | `2` |
 | `SERVER_STORAGE_TYPE` | 存储类型（`local`/`redis`/`mysql`/`pgsql`） | `local` | `pgsql` |
 | `SERVER_STORAGE_URL` | 存储连接串（local 时可为空） | `""` | `postgresql+asyncpg://user:password@host:5432/db` |
+| `CORS_ALLOW_ORIGINS` | CORS 允许的 Origin（逗号分隔，支持 `*`） | `""` | `http://localhost:3000,https://example.com` |
+| `CORS_ALLOW_ORIGIN_REGEX` | CORS 允许的 Origin 正则（覆盖默认 localhost/局域网放行规则；置空可禁用） | 见 `main.py` 默认值 | `^https?://localhost(?::\\d+)?$` |
+| `CORS_ALLOW_CREDENTIALS` | CORS 是否允许携带凭证（cookies 等） | `true` | `false` |
 
 > MySQL 示例：`mysql+aiomysql://user:password@host:3306/db`（若填 `mysql://` 会自动转为 `mysql+aiomysql://`）
 >
